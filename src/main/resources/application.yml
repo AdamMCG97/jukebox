@@ -1,0 +1,12 @@
+spotify:
+  auth:
+    baseUrl: https://accounts.spotify.com
+    client:
+      id: ${SPOTIFY_CLIENT_ID}
+      secret: ${SPOTIFY_CLIENT_SECRET}
+    redirect:
+      url: http://localhost:8080/callback
+    endRedirect:
+      url: http://localhost:8080/session/end
+  api:
+    baseUrl: https://api.spotify.com/v1
