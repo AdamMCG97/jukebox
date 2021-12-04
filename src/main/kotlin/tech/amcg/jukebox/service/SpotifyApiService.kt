@@ -86,6 +86,7 @@ class SpotifyApiService(
     fun addTrackToQueue(trackId: String, sessionId: JukeboxSessionId): Boolean {
         val playbackState = getPlaybackState(sessionId)
         if(playbackState == PlaybackState.NO_ACTIVE_SESSION) {
+            logger.info("No active playback session found for session=$sessionId. Aborting attempt to queue track=$trackId")
             return false
         }
         val token = getValidTokenFromSession(sessionId)
@@ -103,7 +104,7 @@ class SpotifyApiService(
         val statusCode = retrieve.toBodilessEntity().block()?.statusCode
         val elapsed = System.currentTimeMillis() - start
         logger.info("Received $statusCode response after ${elapsed}ms from Post to $requestUrl")
-        return true
+        return statusCode?.is2xxSuccessful ?: false
     }
 
     fun search(sessionId: JukeboxSessionId, query: String) {

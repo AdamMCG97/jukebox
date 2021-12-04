@@ -16,10 +16,10 @@ class SpotifyApiController(private val apiService: SpotifyApiService) {
     }
 
     @GetMapping("/session/{session}/queueTrack")
-    fun addTrackToQueue(@PathVariable("session") sessionId: String, @RequestParam trackId: String) {
+    fun addTrackToQueue(@PathVariable("session") sessionId: String, @RequestParam trackId: String): Boolean {
         //TODO: how to pass in which session/login is requesting the track?
         logger.info("Received request to add trackId=$trackId to queue")
-        apiService.addTrackToQueue(trackId, JukeboxSessionId(sessionId))
+        return apiService.addTrackToQueue(trackId, JukeboxSessionId(sessionId))
     }
 
     @GetMapping("/session/{session}/playbackState")
