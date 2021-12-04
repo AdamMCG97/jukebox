@@ -9,7 +9,8 @@ data class SpotifyApiToken(
         private val expiresIn: Long,
         val refreshToken: String
 ) {
-    val createdTimestamp  = Instant.now()
+
+    private val createdTimestamp  = Instant.now()
 
     fun hasExpired(): Boolean {
         return (Instant.now().epochSecond - createdTimestamp.epochSecond) > expiresIn
@@ -19,6 +20,38 @@ data class SpotifyApiToken(
         return (Instant.now().epochSecond - createdTimestamp.epochSecond) - expiresIn
     }
 
+    fun updateWithRefreshedToken(newToken: SpotifyApiRefreshedToken): SpotifyApiToken {
+        return this.copy(
+                accessToken = newToken.accessToken,
+                tokenType = newToken.tokenType,
+                scope = newToken.scope,
+                expiresIn = newToken.expiresIn
+        )
+    }
+
+}
+
+data class SpotifyApiRefreshedToken(
+        val accessToken: String,
+        val tokenType: String,
+        val scope: String?,
+        val expiresIn: Long
+)
+
+data class SpotifyApiRefreshedTokenDto(
+        val access_token: String,
+        val token_type: String,
+        val scope: String?,
+        private val expires_in: Long
+) {
+    fun toSpotifyApiRefreshedToken(): SpotifyApiRefreshedToken {
+        return SpotifyApiRefreshedToken(
+                access_token,
+                token_type,
+                scope,
+                expires_in
+        )
+    }
 }
 
 data class SpotifyApiTokenDto(

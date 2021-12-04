@@ -5,7 +5,7 @@ import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
-import tech.amcg.jukebox.service.JukeboxSession
+import tech.amcg.jukebox.service.JukeboxSessionId
 
 import tech.amcg.jukebox.service.SpotifyAuthService
 
@@ -24,7 +24,7 @@ class SpotifyAuthController(val authService: SpotifyAuthService) {
 
     @GetMapping("/end/auth")
     fun redirectUserToEndSession(@RequestParam session: String): ResponseEntity<Unit> {
-        val jukeboxSession = JukeboxSession(session)
+        val jukeboxSession = JukeboxSessionId(session)
         return authService.createRedirectToEndSession(jukeboxSession)
     }
 

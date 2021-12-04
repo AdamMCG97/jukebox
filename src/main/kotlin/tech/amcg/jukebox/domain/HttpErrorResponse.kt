@@ -5,7 +5,7 @@ data class HttpErrorResponse(
 )
 
 data class ErrorrResponseBody(
-        val status: String,
-        val message: String,
-        val reason: String
+        val status: String?,
+        val message: String?,
+        val reason: String?
 )

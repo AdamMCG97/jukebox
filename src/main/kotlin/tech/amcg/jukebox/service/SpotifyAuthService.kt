@@ -8,9 +8,9 @@ import org.springframework.http.ResponseEntity
 import org.springframework.stereotype.Service
 import org.springframework.web.reactive.function.BodyInserters
 import org.springframework.web.reactive.function.client.WebClient
-import tech.amcg.jukebox.domain.SpotifyApiToken
-import tech.amcg.jukebox.domain.SpotifyApiTokenDto
-import tech.amcg.jukebox.domain.SpotifyScope
+import tech.amcg.jukebox.domain.*
+import tech.amcg.jukebox.domain.spotify.UserProfile
+import tech.amcg.jukebox.utils.RequestUtils.handle4xxErrors
 import java.lang.IllegalStateException
 import java.lang.RuntimeException
 import java.net.URI
@@ -24,6 +24,9 @@ class SpotifyAuthService(
 
     @Value("\${spotify.auth.baseUrl}")
     private lateinit var authUrl: String
+
+    @Value("\${spotify.api.baseUrl}")
+    private lateinit var apiUrl: String
 
     @Value("\${spotify.auth.client.id}")
     private lateinit var clientId: String
@@ -47,9 +50,9 @@ class SpotifyAuthService(
     //TODO: make this atomic
     val validStates = emptyList<String>().toMutableList()
 
-    fun createRedirectToEndSession(session: JukeboxSession): ResponseEntity<Unit> {
+    fun createRedirectToEndSession(sessionId: JukeboxSessionId): ResponseEntity<Unit> {
         val killSessionState = KILL_SESSION + RandomStringUtils.randomAlphanumeric(STRING_LENGTH - 3)
-        sessionService.requestToEndSession(killSessionState, session)
+        sessionService.requestToEndSession(killSessionState, sessionId)
         return createRedirectResponseEntity(killSessionState, endSessionRedirectUri)
     }
 
@@ -85,7 +88,7 @@ class SpotifyAuthService(
             if(validStates.contains(state)) {
                 validStates.remove(state)
             }
-            throw AuthenticationException("Error authenticating user: No authCode returned")
+            throw AuthenticationException("Error authenticating user: No auth code returned")
         }
         logger.info("Callback called. code=$code and state=$state")
         if(!validStates.contains(state)) {
@@ -93,31 +96,54 @@ class SpotifyAuthService(
         }
         else {
             validStates.remove(state)
-            val token = getAccessToken(code)
+            val token = getAccessToken(code, redirectUri)
             logger.info("Token received: $token")
-            val session = sessionService.createSession(token)
+            val sessionHost = getUserId(token)
+            val session = sessionService.createSession(token, sessionHost)
             logger.info("Started session with id=${session.value}")
             return createResponseEntityAtUri("/session/${session.value}")
         }
     }
 
     fun handleEndSessionCallback(code: String?, state: String, error: String?): ResponseEntity<Unit> {
-        if(null == error && code != null && state.startsWith("XXX")) {
-            if(sessionService.validateRequestToEndSession(state)) {
+        if(null == error && code != null && state.startsWith("XXX") && validStates.contains(state)) {
+            validStates.remove(state)
+            val token = getAccessToken(code, endSessionRedirectUri)
+            val userRequestingSessionEnd = getUserId(token)
+            if(sessionService.validateRequestToEndSession(state, userRequestingSessionEnd)) {
                 return createResponseEntityAtUri("/finishedSession")
             }
         }
         return createResponseEntityAtUri("/home")
     }
 
-    private fun getAccessToken(authCode: String): SpotifyApiToken {
+    fun refreshToken(expiredToken: SpotifyApiToken): SpotifyApiRefreshedToken {
+        val accessTokenUrl = "$authUrl/api/token"
+        logger.info("Post to $accessTokenUrl")
+        val start = System.currentTimeMillis()
+        val bodyParams = BodyInserters
+                .fromFormData("grant_type" , "refresh_token")
+                .with("refresh_token", expiredToken.refreshToken)
+                .with("client_id", clientId)
+                .with("client_secret", clientSecret)
+        val retrieve = webClient
+                .post()
+                .uri(accessTokenUrl)
+                .body(bodyParams)
+                .retrieve()
+        val dtoToken = retrieve.bodyToMono(SpotifyApiRefreshedTokenDto::class.java).block()
+                ?: throw RuntimeException("Token could not be formed from response=${retrieve.bodyToMono(String::class.java).block()}")
+        return dtoToken.toSpotifyApiRefreshedToken()
+    }
+
+    private fun getAccessToken(authCode: String, redirect: String): SpotifyApiToken {
         val accessTokenUrl = "$authUrl/api/token"
         logger.info("Post to $accessTokenUrl")
         val start = System.currentTimeMillis()
         val bodyParams = BodyInserters
                 .fromFormData("grant_type" , "authorization_code")
                 .with("code", authCode)
-                .with("redirect_uri", redirectUri)
+                .with("redirect_uri", redirect)
                 .with("client_id", clientId)
                 .with("client_secret", clientSecret)
         val retrieve = webClient
@@ -131,6 +157,23 @@ class SpotifyAuthService(
         val dtoToken = retrieve.bodyToMono(SpotifyApiTokenDto::class.java).block()
                 ?: throw RuntimeException("Token could not be formed from response=${retrieve.bodyToMono(String::class.java).block()}")
         return dtoToken.toSpotifyApiToken()
+    }
+
+    private fun getUserId(token: SpotifyApiToken): String {
+        val requestUrl = "$apiUrl/me"
+        val start = System.currentTimeMillis()
+        val retrieve = webClient
+                .get()
+                .uri(requestUrl)
+                .header("Content-Type", "application/json")
+                .header("Authorization", "${token.tokenType} ${token.accessToken}")
+                .retrieve()
+                .onStatus({ it.is4xxClientError }, ::handle4xxErrors)
+        val statusCode = retrieve.toBodilessEntity().block()?.statusCode
+        val elapsed = System.currentTimeMillis() - start
+        SpotifyApiService.logger.info("Received $statusCode response after ${elapsed}ms from Post to $requestUrl")
+        val response = retrieve.bodyToMono(UserProfile::class.java).block()
+        return response?.id ?: SpotifyApiService.USER_NOT_FOUND
     }
 
     private fun createResponseEntityAtUri(uri: String): ResponseEntity<Unit> {
