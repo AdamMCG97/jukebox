@@ -8,8 +8,11 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.web.reactive.function.client.WebClient
+import tech.amcg.jukebox.domain.JukeboxSessionId
 import tech.amcg.jukebox.domain.PlaybackState
 import tech.amcg.jukebox.domain.SpotifyApiToken
+import tech.amcg.jukebox.domain.exception.NoSuchActiveSessionException
+import tech.amcg.jukebox.domain.exception.NoSuchSessionException
 import tech.amcg.jukebox.domain.exception.PlaybackStateNotFoundException
 import tech.amcg.jukebox.domain.spotify.Types
 import tech.amcg.jukebox.utils.RequestUtils.handle4xxErrors
@@ -33,8 +36,8 @@ class SpotifyApiService(
     }
 
     private fun getValidTokenFromSession(sessionId: JukeboxSessionId): SpotifyApiToken {
-        val token = sessionService.findSession(sessionId)
-                ?: throw NoSuchSessionException("Session ($sessionId) does not exist ")
+        val token = sessionService.findActiveSession(sessionId)?.authToken
+                ?: throw NoSuchActiveSessionException("Session with id=$sessionId is no longer active or does not exist.")
         if(token.hasExpired()) {
             //TODO: Add call to refresh token here when capability developed
             logger.info("Token has expired for session=$sessionId. Beginning token refresh.")

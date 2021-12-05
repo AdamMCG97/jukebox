@@ -110,9 +110,8 @@ class SpotifyAuthService(
             validStates.remove(state)
             val token = getAccessToken(code, endSessionRedirectUri)
             val userRequestingSessionEnd = getUserId(token)
-            if(sessionService.validateRequestToEndSession(state, userRequestingSessionEnd)) {
-                return createResponseEntityAtUri("/finishedSession")
-            }
+            val sessionId = sessionService.validateRequestToEndSession(state, userRequestingSessionEnd)
+            return createResponseEntityAtUri("/session/$sessionId")
         }
         return createResponseEntityAtUri("/home")
     }
